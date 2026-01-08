@@ -9,9 +9,11 @@ class MusicCog(commands.Cog):
         self.queue = []
         self.is_playing = False
         self.is_paused = False
+        self.is_looping = False
+        self.is_loopqueue = False
+        self.current_song = None
         self.vc = None
 
-        # YDL options
         self.YDL_OPTIONS = {
             'format': 'bestaudio/best',
             'noplaylist': 'True',
@@ -21,11 +23,22 @@ class MusicCog(commands.Cog):
             'source_address': '0.0.0.0'
         }
 
-        # FFmpeg options
         self.FFMPEG_OPTIONS = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn'
         }
+
+    async def update_presence(self, song):
+        if song:
+            activity = discord.Activity(
+                type=discord.ActivityType.listening,
+                name=song[0]['title'],
+                details="Enjoying some music",
+                state=f"Queue: {len(self.queue)} songs"
+            )
+            await self.bot.change_presence(activity=activity)
+        else:
+            await self.bot.change_presence(activity=None)
 
     def search_yt(self, item):
         with yt_dlp.YoutubeDL(self.YDL_OPTIONS) as ydl:
@@ -37,54 +50,76 @@ class MusicCog(commands.Cog):
             except Exception:
                 return False
 
-    def play_next(self):
-        if len(self.queue) > 0:
+    def play_next(self, error=None):
+        if self.is_looping and self.current_song:
             self.is_playing = True
-            m_url = self.queue[0][0]['source']
-            self.queue.pop(0)
-
-            coro = self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next())
+            m_url = self.current_song[0]['source']
+            self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next(e))
+        elif len(self.queue) > 0:
+            self.is_playing = True
+            self.current_song = self.queue.pop(0)
+            m_url = self.current_song[0]['source']
+            
+            if self.is_loopqueue:
+                self.queue.append(self.current_song)
+                
+            self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next(e))
+            self.bot.loop.create_task(self.update_presence(self.current_song))
         else:
             self.is_playing = False
+            self.current_song = None
+            self.bot.loop.create_task(self.update_presence(None))
 
     async def play_music(self, ctx):
         if len(self.queue) > 0:
             self.is_playing = True
-            m_url = self.queue[0][0]['source']
+            self.current_song = self.queue.pop(0)
+            m_url = self.current_song[0]['source']
             
-            # Connect to voice channel if not already connected
-            if self.vc is None or not self.vc.is_connected():
-                self.vc = await self.queue[0][1].connect()
+            if self.is_loopqueue:
+                self.queue.append(self.current_song)
 
-                if self.vc is None:
-                    await ctx.send("Could not connect to the voice channel")
-                    return
-            else:
-                await self.vc.move_to(self.queue[0][1])
+            if self.vc is not None:
+                try:
+                    await self.vc.disconnect(force=True)
+                except:
+                    pass
+                self.vc = None
 
-            self.queue.pop(0)
-            self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next())
+            try:
+                self.vc = await self.current_song[1].connect(timeout=30, reconnect=True, self_deaf=True)
+            except Exception as e:
+                await ctx.send("Could not connect to the voice channel.")
+                self.is_playing = False
+                return
+
+            self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next(e))
+            await self.update_presence(self.current_song)
         else:
             self.is_playing = False
+            self.current_song = None
+            await self.update_presence(None)
 
     @commands.command(name="play", aliases=["p", "playing"], help="Plays a selected song from youtube")
     async def play(self, ctx, *args):
         query = " ".join(args)
+        voice_channel = ctx.author.voice.channel if ctx.author.voice else None
         
-        voice_channel = ctx.author.voice.channel
         if voice_channel is None:
             await ctx.send("Connect to a voice channel!")
         elif self.is_paused:
             self.vc.resume()
+            self.is_paused = False
+            self.is_playing = True
         else:
             song = self.search_yt(query)
             if type(song) == bool:
-                await ctx.send("Could not download the song. Incorrect format try another keyword. This could be due to playlist or a livestream format.")
+                await ctx.send("Could not find the song.")
             else:
                 await ctx.send(f"Song added to the queue: **{song['title']}**")
                 self.queue.append([song, voice_channel])
                 
-                if self.is_playing == False:
+                if not self.is_playing:
                     await self.play_music(ctx)
 
     @commands.command(name="pause", help="Pauses the current song being played")
@@ -108,14 +143,14 @@ class MusicCog(commands.Cog):
     @commands.command(name="skip", aliases=["s"], help="Skips the current song being played")
     async def skip(self, ctx):
         if self.vc is not None and self.vc:
+            self.is_looping = False
             self.vc.stop()
-            # self.play_next() will be called by 'after' callback
             
     @commands.command(name="queue", aliases=["q"], help="Displays the current songs in queue")
     async def queue(self, ctx):
         retval = ""
         for i in range(0, len(self.queue)):
-            if i > 4: break # Limit display
+            if i > 4: break
             retval += f"{i+1}. {self.queue[i][0]['title']}\n"
 
         if retval != "":
@@ -128,13 +163,48 @@ class MusicCog(commands.Cog):
         if self.vc is not None and self.is_playing:
             self.vc.stop()
         self.queue = []
+        self.current_song = None
+        self.is_playing = False
+        self.is_paused = False
+        self.is_looping = False
+        self.is_loopqueue = False
+        await self.update_presence(None)
         await ctx.send("Music queue cleared")
+
+    @commands.command(name="stop", aliases=["st"], help="Stops the music and disconnects")
+    async def stop(self, ctx):
+        self.is_playing = False
+        self.is_paused = False
+        self.is_looping = False
+        self.is_loopqueue = False
+        if self.vc:
+            await self.vc.disconnect()
+        self.queue = []
+        self.current_song = None
+        await self.update_presence(None)
+        await ctx.send("Stopped and disconnected.")
 
     @commands.command(name="leave", aliases=["l", "disconnect"], help="Kick the bot from VC")
     async def leave(self, ctx):
-        self.is_playing = False
-        self.is_paused = False
-        await self.vc.disconnect()
+        await self.stop(ctx)
+
+    @commands.command(name="loop", aliases=["lp"], help="Toggles looping the current song")
+    async def loop(self, ctx):
+        if self.vc is not None:
+            self.is_looping = not self.is_looping
+            status = "enabled" if self.is_looping else "disabled"
+            await ctx.send(f"Looping {status}")
+        else:
+            await ctx.send("No music is currently playing")
+
+    @commands.command(name="loopqueue", aliases=["lq"], help="Toggles looping the entire queue")
+    async def loopqueue(self, ctx):
+        if self.vc is not None:
+            self.is_loopqueue = not self.is_loopqueue
+            status = "enabled" if self.is_loopqueue else "disabled"
+            await ctx.send(f"Looping queue {status}")
+        else:
+            await ctx.send("No music is currently playing")
 
 async def setup(bot):
     await bot.add_cog(MusicCog(bot))
