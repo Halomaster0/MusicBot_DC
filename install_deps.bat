@@ -52,11 +52,17 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+:: 4. Setup .env
+if not exist .env (
+    echo DISCORD_TOKEN=your_token_here>.env
+    echo Created template .env file.
+)
+
 echo.
 echo ==========================================
 echo    INSTALLATION SUCCESSFUL!
 echo ==========================================
-echo You can now run the bot using run_bot.bat
-echo or Start_MusicBot_Hidden.vbs
+echo IMPORTANT: Open ".env" and paste your token!
+echo Then run the bot using run_bot.bat
 echo ==========================================
 pause

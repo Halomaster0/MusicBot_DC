@@ -16,17 +16,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger('discord_bot')
 
-# Load environment variables from the root directory
-# This works whether you run from root or from /src
-env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
-load_dotenv(env_path)
+# Handle environment variables
+root_env = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+src_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+
+if os.path.exists(root_env):
+    load_dotenv(root_env)
+    logger.info(f"Loaded .env from root: {root_env}")
+elif os.path.exists(src_env):
+    load_dotenv(src_env)
+    logger.info(f"Loaded .env from src: {src_env}")
+else:
+    logger.warning("No .env file found in root or src directories.")
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
-if not TOKEN or TOKEN == "your_token_here":
-    print("ERROR: DISCORD_TOKEN not found in .env file or is still set to placeholder.")
-    print("Please update the .env file with your actual bot token.")
-    input("Press Enter to exit...") # Keeps window open for the user
+if not TOKEN or TOKEN.strip() == "" or TOKEN == "your_token_here":
+    print("\n" + "="*60)
+    print(" CRITICAL ERROR: DISCORD_TOKEN NOT FOUND")
+    print("="*60)
+    print(f"I looked for a .env file here: {root_env}")
+    print("\nPlease ensure:")
+    print("1. You have a file named exactly '.env' (not '.env.txt')")
+    print("2. It contains: DISCORD_TOKEN=your_actual_token_here")
+    print("="*60)
+    input("\nPress Enter to exit...")
     exit()
 
 # Set up intents

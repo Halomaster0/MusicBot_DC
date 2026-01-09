@@ -16,9 +16,10 @@ A personal-use Discord music bot built with Python, `discord.py`, and `yt-dlp`. 
 - **Discord Bot Token**: Create one at the [Discord Developer Portal](https://discord.com/developers/applications).
 
 ### 2. Installation
-To install the required libraries without needing a C++ compiler:
+To ensure all libraries are installed correctly in a private environment:
 1. Double-click the `install_deps.bat` file in the root directory.
-2. This will ensure all dependencies are installed as pre-compiled binaries.
+2. This will automatically create a virtual environment (`.venv`) and install all required modules like `discord.py` and `yt-dlp`.
+3. Safe to run even if you don't have a C++ compiler.
 
 ### 3. Configuration
 Open the `.env` file in the root directory and replace the placeholder with your actual Discord Bot Token:
