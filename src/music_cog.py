@@ -2,6 +2,10 @@ import discord
 from discord.ext import commands
 import yt_dlp
 import asyncio
+import os
+import logging
+
+logger = logging.getLogger('discord_bot.music')
 
 class MusicCog(commands.Cog):
     def __init__(self, bot):
@@ -20,13 +24,22 @@ class MusicCog(commands.Cog):
             'quiet': True,
             'no_warnings': True,
             'default_search': 'auto',
-            'source_address': '0.0.0.0'
+            # 'source_address': '0.0.0.0' # Commented out as it can cause issues on some Windows network stacks
         }
 
         self.FFMPEG_OPTIONS = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn'
         }
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """Monitor voice state changes for the bot."""
+        if member.id == self.bot.user.id:
+            if before.channel is not None and after.channel is None:
+                logger.info(f"Bot was disconnected from {before.channel.name}")
+                self.vc = None
+                self.is_playing = False
 
     async def update_presence(self, song):
         if song:
@@ -51,10 +64,18 @@ class MusicCog(commands.Cog):
                 return False
 
     def play_next(self, error=None):
+        if self.vc is None or not self.vc.is_connected():
+            logger.warning("play_next called but VC is disconnected or None.")
+            self.is_playing = False
+            return
+
         if self.is_looping and self.current_song:
             self.is_playing = True
             m_url = self.current_song[0]['source']
-            self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next(e))
+            try:
+                self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next(e))
+            except Exception:
+                self.is_playing = False
         elif len(self.queue) > 0:
             self.is_playing = True
             self.current_song = self.queue.pop(0)
@@ -62,9 +83,12 @@ class MusicCog(commands.Cog):
             
             if self.is_loopqueue:
                 self.queue.append(self.current_song)
-                
-            self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next(e))
-            self.bot.loop.create_task(self.update_presence(self.current_song))
+            
+            try:
+                self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next(e))
+                self.bot.loop.create_task(self.update_presence(self.current_song))
+            except Exception:
+                self.is_playing = False
         else:
             self.is_playing = False
             self.current_song = None
@@ -75,26 +99,60 @@ class MusicCog(commands.Cog):
             self.is_playing = True
             self.current_song = self.queue.pop(0)
             m_url = self.current_song[0]['source']
+            target_vc = self.current_song[1]
             
             if self.is_loopqueue:
                 self.queue.append(self.current_song)
 
-            if self.vc is not None:
+            # --- Connection Logic ---
+            # Explicitly cleanup any old connection state before starting a new one
+            if self.vc:
+                logger.info("Cleaning up existing voice connection state.")
                 try:
                     await self.vc.disconnect(force=True)
-                except:
-                    pass
+                    await asyncio.sleep(1) 
+                except Exception as e:
+                    logger.debug(f"Cleanup error (ignoring): {e}")
                 self.vc = None
-
+            logger.info(f"Connecting to voice channel: {target_vc.name}")
             try:
-                self.vc = await self.current_song[1].connect(timeout=30, reconnect=True, self_deaf=True)
+                # Use a smaller timeout for the initial call, as discord.py will handle retries internally if reconnect=True
+                self.vc = await target_vc.connect(timeout=20, reconnect=True, self_deaf=True)
+                logger.info(f"Connected to {target_vc.name}")
             except Exception as e:
-                await ctx.send("Could not connect to the voice channel.")
+                logger.error(f"Connection failed: {e}")
+                await ctx.send(f"Failed to connect to voice: {e}")
                 self.is_playing = False
                 return
 
-            self.vc.play(discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS), after=lambda e: self.play_next(e))
-            await self.update_presence(self.current_song)
+            if not self.vc or not self.vc.is_connected():
+                await ctx.send("Could not establish a stable voice connection.")
+                self.is_playing = False
+                return
+
+            # --- FFmpeg Verification ---
+            import shutil
+            ffmpeg_path = shutil.which("ffmpeg")
+            if not ffmpeg_path:
+                # Try finding it in the project root if not in PATH
+                root_ffmpeg = os.path.join(os.getcwd(), "ffmpeg.exe")
+                if os.path.exists(root_ffmpeg):
+                    ffmpeg_path = root_ffmpeg
+                else:
+                    await ctx.send("CRITICAL ERROR: `ffmpeg` not found. Please install FFmpeg and add it to your PATH.")
+                    self.is_playing = False
+                    return
+
+            # --- Playback ---
+            logger.info(f"Playing: {self.current_song[0]['title']}")
+            try:
+                self.vc.play(discord.FFmpegPCMAudio(m_url, executable=ffmpeg_path, **self.FFMPEG_OPTIONS), 
+                             after=lambda e: self.play_next(e))
+                await self.update_presence(self.current_song)
+            except Exception as e:
+                logger.error(f"Playback error: {e}")
+                await ctx.send(f"Error during playback setup: {e}")
+                self.is_playing = False
         else:
             self.is_playing = False
             self.current_song = None
@@ -108,9 +166,14 @@ class MusicCog(commands.Cog):
         if voice_channel is None:
             await ctx.send("Connect to a voice channel!")
         elif self.is_paused:
-            self.vc.resume()
-            self.is_paused = False
-            self.is_playing = True
+            if self.vc and self.vc.is_connected():
+                self.vc.resume()
+                self.is_paused = False
+                self.is_playing = True
+            else:
+                await ctx.send("Lost voice connection. Re-adding song.")
+                self.is_paused = False
+                self.is_playing = False
         else:
             song = self.search_yt(query)
             if type(song) == bool:
@@ -124,25 +187,28 @@ class MusicCog(commands.Cog):
 
     @commands.command(name="pause", help="Pauses the current song being played")
     async def pause(self, ctx, *args):
-        if self.is_playing:
+        if self.vc and self.vc.is_playing():
             self.is_playing = False
             self.is_paused = True
             self.vc.pause()
+            await ctx.send("Paused.")
         elif self.is_paused:
             self.is_paused = False
             self.is_playing = True
             self.vc.resume()
+            await ctx.send("Resumed.")
 
     @commands.command(name="resume", aliases=["r"], help="Resumes playing with the discord bot")
     async def resume(self, ctx, *args):
-        if self.is_paused:
+        if self.vc and self.is_paused:
             self.is_paused = False
             self.is_playing = True
             self.vc.resume()
+            await ctx.send("Resumed.")
 
     @commands.command(name="skip", aliases=["s"], help="Skips the current song being played")
     async def skip(self, ctx):
-        if self.vc is not None and self.vc:
+        if self.vc is not None and self.vc.is_connected():
             self.is_looping = False
             self.vc.stop()
             
@@ -160,7 +226,7 @@ class MusicCog(commands.Cog):
 
     @commands.command(name="clear", aliases=["c", "bin"], help="Stops the music and clears the queue")
     async def clear(self, ctx):
-        if self.vc is not None and self.is_playing:
+        if self.vc is not None and self.vc.is_connected():
             self.vc.stop()
         self.queue = []
         self.current_song = None
@@ -179,6 +245,7 @@ class MusicCog(commands.Cog):
         self.is_loopqueue = False
         if self.vc:
             await self.vc.disconnect()
+            self.vc = None
         self.queue = []
         self.current_song = None
         await self.update_presence(None)
@@ -190,7 +257,7 @@ class MusicCog(commands.Cog):
 
     @commands.command(name="loop", aliases=["lp"], help="Toggles looping the current song")
     async def loop(self, ctx):
-        if self.vc is not None:
+        if self.vc is not None and self.vc.is_connected():
             self.is_looping = not self.is_looping
             status = "enabled" if self.is_looping else "disabled"
             await ctx.send(f"Looping {status}")
@@ -199,7 +266,7 @@ class MusicCog(commands.Cog):
 
     @commands.command(name="loopqueue", aliases=["lq"], help="Toggles looping the entire queue")
     async def loopqueue(self, ctx):
-        if self.vc is not None:
+        if self.vc is not None and self.vc.is_connected():
             self.is_loopqueue = not self.is_loopqueue
             status = "enabled" if self.is_loopqueue else "disabled"
             await ctx.send(f"Looping queue {status}")

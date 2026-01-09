@@ -28,11 +28,9 @@ DISCORD_TOKEN=your_token_here
 ```
 
 ### 4. Running the Bot
-Navigate to the `src` directory and run the main script:
-```powershell
-cd src
-python main.py
-```
+You can run the bot in two ways:
+- **With Console Visibility**: Double-click `run_bot.bat` in the root directory. This will keep a window open and show you what the bot is doing.
+- **Hidden Mode**: Double-click `Start_MusicBot_Hidden.vbs`. This runs the bot in the background without a window.
 
 ## Available Commands
 
@@ -48,19 +46,20 @@ python main.py
 | `!clear` | `!c` | Clears the queue and stops playback. |
 | `!leave` | `!l` | Disconnects the bot from the voice channel. |
 
-## Troubleshooting & Advanced Setup
+## Troubleshooting
 
-### 1. Fix: Opus Not Loaded (No Audio)
-If the bot joins but doesn't play audio, it's because Windows can't find the **Opus** library.
-1.  Download `libopus.dll` (64-bit) from a trusted source like [this direct link](https://github.com/GyanD/codexffmpeg/raw/master/builds/ffmpeg-git-full.7z) (extract it from the `bin` folder) or search for "libopus.dll download".
-2.  Place `libopus.dll` directly into the `src` folder of this project.
-3.  Restart the bot. It should now say `Opus: Loaded`.
+### 1. Audio Issues (Opus/FFmpeg)
+- **Opus**: The `libopus.dll` is included in this repository, so it should work out of the box.
+- **FFmpeg**: If the bot sits in silence, ensure `ffmpeg` is installed and in your system PATH.
+- **Logs**: Detailed information is written to `bot.log` in the root directory if any errors occur.
 
-### 2. Running in the Background (No Window)
-If you want the bot to stay active without a terminal window open:
-1.  Ensure your `.env` token is set and the bot works normally.
-2.  Double-click the `run_hidden.vbs` file in the root directory.
-3.  The bot will start silently. To stop it, use the **Task Manager** to end the "Python" or "pythonw.exe" task.
+### 2. Stopping the Hidden Bot
+If you are running the bot via the VBS script and need to stop it:
+1. Open **Task Manager**.
+2. Go to the **Details** tab.
+3. Look for `pythonw.exe`. 
+4. End the task. 
+   - *Tip*: Enable the "Command line" column to verify it's running `src/main.py`.
 
 ---
 

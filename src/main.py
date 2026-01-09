@@ -1,8 +1,20 @@
 import discord
 import os
 import asyncio
+import logging
 from discord.ext import commands
 from dotenv import load_dotenv
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s:%(levelname)s:%(name)s: %(message)s',
+    handlers=[
+        logging.FileHandler(filename='bot.log', encoding='utf-8', mode='w'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('discord_bot')
 
 # Load environment variables from the root directory
 # This works whether you run from root or from /src
@@ -28,38 +40,59 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 async def load_extensions():
     """Load the music cog."""
     try:
-        # Note: 'music_cog' refers to music_cog.py in the same directory
         await bot.load_extension('music_cog')
-        print("Music cog loaded successfully.")
     except Exception as e:
-        print(f"Failed to load music cog: {e}")
+        logger.error(f"Failed to load music cog: {e}")
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name} (ID: {bot.user.id})')
+    logger.info(f'Logged in as {bot.user.name} (ID: {bot.user.id})')
+    logger.info(f'Discord.py Version: {discord.__version__}')
     
     # Ensure Opus is loaded for voice support
     if not discord.opus.is_loaded():
+        logger.info("Opus not loaded. Searching for library...")
         try:
             import ctypes.util
-            opus_path = ctypes.util.find_library('libopus')
-            if opus_path:
-                discord.opus.load_opus(opus_path)
-            else:
-                for name in ['libopus-0', 'libopus', 'opus']:
+            # Search in common locations and also the root directory of the project
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            local_paths = [
+                os.path.join(root_dir, 'libopus.dll'),
+                os.path.join(root_dir, 'opus.dll'),
+                os.path.join(os.path.dirname(__file__), 'libopus.dll'),
+                os.path.join(os.path.dirname(__file__), 'opus.dll'),
+                'C:\\Windows\\System32\\opus.dll',
+                'C:\\Windows\\System32\\libopus.dll',
+            ]
+            
+            for path in local_paths:
+                if os.path.exists(path):
                     try:
-                        discord.opus.load_opus(name)
-                        break
-                    except:
-                        continue
-        except:
-            pass
+                        discord.opus.load_opus(path)
+                        if discord.opus.is_loaded():
+                            logger.info(f"Found and loaded Opus at: {path}")
+                            break
+                    except Exception as e:
+                        logger.error(f"Attempted {path} but failed: {e}")
+            
+            if not discord.opus.is_loaded():
+                for name in ['libopus-0', 'libopus', 'opus']:
+                    system_path = ctypes.util.find_library(name)
+                    if system_path:
+                        try:
+                            discord.opus.load_opus(system_path)
+                            if discord.opus.is_loaded():
+                                logger.info(f"Found and loaded system library: {name}")
+                                break
+                        except Exception as e:
+                            logger.error(f"Attempted system {name} but failed: {e}")
+        except Exception as e:
+            logger.critical(f"Serious error during Opus search: {e}")
 
     if discord.opus.is_loaded():
-        print("Music Bot is ready!")
+        logger.info("Music Bot is ready!")
     else:
-        print("WARNING: Opus library not loaded. Voice features may not work.")
-    print('------')
+        logger.critical("Opus library NOT loaded.")
 
 @bot.event
 async def on_command_error(ctx, error):
