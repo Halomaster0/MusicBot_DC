@@ -26,8 +26,24 @@ if %errorlevel% neq 0 (
 )
 echo Found: %PY_CMD%
 
-:: 2. Create Virtual Environment
-echo [2/3] Setting up virtual environment (.venv)...
+:: 2. Check for FFmpeg
+echo [2/4] Checking for FFmpeg...
+set FFMPEG_OK=0
+ffmpeg -version >nul 2>&1
+if %errorlevel% equ 0 set FFMPEG_OK=1
+if exist ffmpeg.exe set FFMPEG_OK=1
+
+if %FFMPEG_OK% equ 0 (
+    echo.
+    echo [!] WARNING: FFmpeg was not detected!
+    echo Audio will not work without it.
+    echo Please see README.md for the "Easy Setup" guide.
+) else (
+    echo Found FFmpeg.
+)
+
+:: 3. Create Virtual Environment
+echo [3/4] Setting up virtual environment (.venv)...
 if not exist .venv (
     %PY_CMD% -m venv .venv
     if %errorlevel% neq 0 (
@@ -40,8 +56,8 @@ if not exist .venv (
     echo .venv already exists, skipping creation.
 )
 
-:: 3. Install Dependencies
-echo [3/3] Installing dependencies...
+:: 4. Install Dependencies
+echo [4/4] Installing dependencies...
 .venv\Scripts\python.exe -m pip install --upgrade pip
 .venv\Scripts\python.exe -m pip install --only-binary :all: -r requirements.txt
 

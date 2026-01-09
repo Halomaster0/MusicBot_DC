@@ -12,7 +12,7 @@ A personal-use Discord music bot built with Python, `discord.py`, and `yt-dlp`. 
 
 ### 1. Prerequisites
 - **Python 3.8+**
-- **FFmpeg**: Must be installed and added to your system's PATH.
+- **FFmpeg**: Required for audio processing. See the [FFmpeg Setup](#ffmpeg-setup) section below.
 - **Discord Bot Token**: Create one at the [Discord Developer Portal](https://discord.com/developers/applications).
 
 ### 2. Installation
@@ -48,10 +48,16 @@ You can run the bot in two ways:
 
 ## Troubleshooting
 
-### 1. Audio Issues (Opus/FFmpeg)
-- **Opus**: The `libopus.dll` is included in this repository, so it should work out of the box.
-- **FFmpeg**: If the bot sits in silence, ensure `ffmpeg` is installed and in your system PATH.
-- **Logs**: Detailed information is written to `bot.log` in the root directory if any errors occur.
+### 1. Audio Issues (FFmpeg Setup) <a name="ffmpeg-setup"></a>
+If the bot joins the channel but refuses to play audio, it's almost always because **FFmpeg** is missing.
+
+**Easy Setup (Recommended):**
+1. Download the FFmpeg essentials zip from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip).
+2. Open the zip file, go into the `bin` folder, and find `ffmpeg.exe`.
+3. Drag and drop `ffmpeg.exe` directly into the **root folder** of this project (next to `run_bot.bat`).
+4. Restart the bot.
+
+**Alternative:** You can also install FFmpeg system-wide and add it to your environment `PATH`.
 
 ### 2. Stopping the Hidden Bot
 If you are running the bot via the VBS script and need to stop it:
