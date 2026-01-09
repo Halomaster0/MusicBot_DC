@@ -35,9 +35,8 @@ if exist ffmpeg.exe set FFMPEG_OK=1
 
 if %FFMPEG_OK% equ 0 (
     echo.
-    echo [!] WARNING: FFmpeg was not detected!
-    echo Audio will not work without it.
-    echo Please see README.md for the "Easy Setup" guide.
+    echo [!] FFmpeg not found on system.
+    echo [!] It will be installed automatically via Pip in Step 4.
 ) else (
     echo Found FFmpeg.
 )
