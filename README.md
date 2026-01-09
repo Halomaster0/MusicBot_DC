@@ -51,17 +51,13 @@ You can run the bot in two ways:
 ### 1. Audio Issues (FFmpeg Setup) <a name="ffmpeg-setup"></a>
 If the bot joins the channel but refuses to play audio, it's almost always because **FFmpeg** is missing.
 
-**The Easiest Way (Automated):**
-Simply run `install_deps.bat`. This will automatically install `static-ffmpeg` via Pip, and the bot will find it on its own. No manual downloading required!
-
-**The Manual Way (Recommended for Distribution):**
-If you want to provide a single download link for your friends, you can use **GitHub Releases**:
-1. Download `ffmpeg.exe` and `libopus.dll`.
-2. On your GitHub repository, click **"Releases"** -> **"Draft a new release"**.
-3. Upload the binaries (.exe and .dll) as assets.
-4. Give your friend the link to that Release. They can just download them and drop them into the bot's root folder.
-
-**Alternative:** You can also manually download FFmpeg from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip), extract `ffmpeg.exe`, and place it in the root folder next to `run_bot.bat`.
+**Easy Setup (Recommended):**
+1. Go to [gyan.dev](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip) and download the FFmpeg essentials zip.
+2. Open the zip file, go into the `bin` folder, and find `ffmpeg.exe`.
+3. Drag and drop `ffmpeg.exe` directly into the **root folder** of this project (next to `run_bot.bat`).
+4. Restart the bot. 
+(I have also attached the dll for you to add to path if you would like to do this instead)
+*Note: This works without adding FFmpeg to your system PATH. The included `libopus.dll` handles the rest!*
 
 ### 2. Stopping the Hidden Bot
 If you are running the bot via the VBS script and need to stop it:

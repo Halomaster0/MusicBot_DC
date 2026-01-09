@@ -139,15 +139,7 @@ class MusicCog(commands.Cog):
                 if os.path.exists(root_ffmpeg):
                     ffmpeg_path = root_ffmpeg
                 else:
-                    # Try using static-ffmpeg if installed via pip
-                    try:
-                        import static_ffmpeg
-                        ffmpeg_path = static_ffmpeg.get_ffmpeg_path()
-                    except ImportError:
-                        ffmpeg_path = None
-
-                if not ffmpeg_path:
-                    await ctx.send("CRITICAL ERROR: `ffmpeg` not found. Please install FFmpeg or run `install_deps.bat`.")
+                    await ctx.send("CRITICAL ERROR: `ffmpeg` not found. Please install FFmpeg and add it to your PATH.")
                     self.is_playing = False
                     return
 
